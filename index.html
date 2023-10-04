@@ -1,0 +1,178 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Universal Mastery</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #181818;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        canvas {
+            touch-action: none; /* Prevent default touch behaviors */
+            border: 1px solid white;
+        }
+    </style>
+</head>
+
+<body>
+    <script>
+        let inc = 0.1;
+        let scl = 10;
+        let cols, rows;
+        let zoff = 0;
+        let particles = [];
+        let flowfield;
+        let galaxyCount = 5;
+
+        let previousTouchDist = 0;
+        let touchAngle = 0;
+        let prevAngle = 0;
+        let doubleTapTimer = null;
+
+        function setup() {
+            createCanvas(windowWidth, windowHeight);
+            colorMode(HSB, 255);
+            cols = floor(width / scl);
+            rows = floor(height / scl);
+            flowfield = new Array(cols * rows);
+            for (let i = 0; i < 1000; i++) {
+                particles.push(new Particle());
+            }
+            background(180, 50, 25);
+        }
+
+        function draw() {
+            fill(180, 50, 25, 2);
+            rect(0, 0, width, height);
+            galaxyCount = map(mouseY, 0, height, 5, 10); // Dynamic galaxy formation
+
+            let yoff = 0;
+            for (let y = 0; y < rows; y++) {
+                let xoff = 0;
+                for (let x = 0; x < cols; x++) {
+                    let index = x + y * cols;
+                    let angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
+                    for (let g = 0; g < galaxyCount; g++) {
+                        let gx = sin(g) * width;
+                        let gy = cos(g) * height;
+                        let d = dist(x * scl, y * scl, gx, gy);
+                        if (d < 150) {
+                            angle += map(d, 0, 150, TWO_PI, 0);
+                        }
+                    }
+                    let v = p5.Vector.fromAngle(angle);
+                    v.setMag(1);
+                    flowfield[index] = v;
+                    xoff += inc;
+                }
+                yoff += inc;
+                zoff += 0.005;
+            }
+
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].follow(flowfield);
+                particles[i].update();
+                particles[i].edges();
+                particles[i].show();
+            }
+        }
+
+        class Particle {
+            constructor() {
+                this.pos = createVector(random(width), random(height));
+                this.vel = createVector(0, 0);
+                this.acc = createVector(0, 0);
+                this.maxspeed = 4;
+                this.h = random(0, 50);
+            }
+
+            follow(vectors) {
+                let x = floor(this.pos.x / scl);
+                let y = floor(this.pos.y / scl);
+                let index = x + y * cols;
+                let force = vectors[index];
+                let attraction = createVector(mouseX - this.pos.x, mouseY - this.pos.y); // Mouse attraction
+                attraction.setMag(0.1);
+                this.applyForce(force);
+                this.applyForce(attraction);
+            }
+
+            applyForce(force) {
+                this.acc.add(force);
+            }
+
+            update() {
+                this.vel.add(this.acc);
+                this.vel.limit(this.maxspeed);
+                this.pos.add(this.vel);
+                this.acc.mult(0);
+            }
+
+            edges() {
+                if (this.pos.x > width) this.pos.x = 0;
+                if (this.pos.x < 0) this.pos.x = width;
+                if (this.pos.y > height) this.pos.y = 0;
+                if (this.pos.y < 0) this.pos.y = height;
+            }
+
+            show() {
+                this.h = map(this.vel.mag(), 0, this.maxspeed, 0, 255); // Color based on velocity
+                stroke(this.h, 255, 255, 50);
+                strokeWeight(2);
+                point(this.pos.x, this.pos.y);
+            }
+        }
+
+        function touchStarted() {
+            if (touches.length === 2) {
+                previousTouchDist = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+                touchAngle = atan2(touches[1].y - touches[0].y, touches[1].x - touches[0].x);
+            }
+
+            if (doubleTapTimer) {
+                supernova(touches[0].x, touches[0].y);
+                clearTimeout(doubleTapTimer);
+                doubleTapTimer = null;
+            } else {
+                doubleTapTimer = setTimeout(() => {
+                    clearTimeout(doubleTapTimer);
+                    doubleTapTimer = null;
+                }, 300);
+            }
+        }
+
+        function touchMoved() {
+            if (touches.length === 2) {
+                let currentDist = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+                scl += (currentDist - previousTouchDist) * 0.01; // Pinch to Zoom
+                previousTouchDist = currentDist;
+
+                let currentAngle = atan2(touches[1].y - touches[0].y, touches[1].x - touches[0].x);
+                let angleChange = currentAngle - touchAngle;
+                touchAngle = currentAngle;
+                zoff += angleChange * 0.5; // Twist to Spin
+            }
+
+            return false; // Prevent default touch behaviors
+        }
+
+        function supernova(x, y) {
+            for (let i = 0; i < 100; i++) {
+                let p = new Particle();
+                p.pos = createVector(x, y);
+                p.vel = createVector(random(-5, 5), random(-5, 5));
+                particles.push(p);
+            }
+        }
+    </script>
+</body>
+</html>
